@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-#################################################################
+################################################################
 #
 # IBM Control Desk REST mediator for topology inclusion into ASM
 #
@@ -187,6 +187,24 @@ def loadEntityTypeMapping(filepath, sep=",", comment_char='#'):
             else:
                mapDict[values[0].replace('"', '')] = values[1].replace('"', '')
    return mapDict
+
+def loadStatusFilter(filepath, sep=",", comment_char='#'):
+
+   ################################################################################
+   #
+   # This function reads the entityType map configuration file and returns a dictionary
+   #
+   ################################################################################
+
+   statusArray = []
+   lineNum = 0
+   
+   with open(filepath, "rt") as f:
+      for line in f:
+         l = line.strip()
+         if l and not l.startswith(comment_char):
+            statusArray.append(l)
+   return statusArray
 
 def loadRelationshipMapping(filepath, sep=",", comment_char='#'):
 
@@ -526,7 +544,7 @@ def getCiData():
 
    if(readFromRest == 1):
       numCi = 0
-      #authHeader = 'Basic ' + base64.b64encode(icdServerDict["user"] + ":" + icdServerDict["password"])
+      authHeader = 'Basic ' + base64.b64encode(icdServerDict["user"] + ":" + icdServerDict["password"])
       method = "GET"
       isMore = 1
       offset = 0
@@ -537,14 +555,17 @@ def getCiData():
    
       while(isMore):
    
-         requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?_lid=FRANK&_lpwd=ICD761Demo1&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
+         #requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?_lid=FRANK&_lpwd=ICD761Demo1&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
+         requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
+         #requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
+
          print "My query URL is: " + requestUrl
 
          try:
             request = urllib2.Request(requestUrl)
             request.add_header("Content-Type",'application/json')
             request.add_header("Accept",'application/json')
-            #request.add_header("Authorization",authHeader)
+            request.add_header("Authorization",authHeader)
             request.get_method = lambda: method
       
             response = urllib2.urlopen(request)
@@ -604,60 +625,67 @@ def getCiData():
    
    for ci in readCiEntries:
 
-      #print json.dumps(ci)
-      asmObject = {}
-      asmObject["entityTypes"] = []
-
-      ############
-      # Add attributes to ASM object
-      ############
-
-      for attribute in ci["Attributes"]:
-         asmObject[str(attribute)] = str(ci["Attributes"][attribute]["content"])
-         asmObject["uniqueId"] = ci["Attributes"]["CINUM"]["content"]
-         asmObject["name"] = ci["Attributes"]["CINAME"]["content"]
-         asmObject["matchTokens"] = []
-         asmObject["matchTokens"].append(ci["Attributes"]["CINAME"]["content"])
-
-      ############
-      # Assign entityType based on entityTypeMapping configuration. If not in config file, just use "host" as default
-      ############
- 
-      if str(ci["Attributes"]["CLASSSTRUCTUREID"]["content"]) in entityTypeMappingDict:
-         asmObject["entityTypes"].append(entityTypeMappingDict[ci["Attributes"]["CLASSSTRUCTUREID"]["content"]])
-      else:
-         asmObject["entityTypes"].append("host")
-         
-      ############
-      # Process CISPEC and CIRELATION entries
-      ############
-
-      if "RelatedMbos" in ci:
-         if "CISPEC" in ci["RelatedMbos"]:
-            for cispec in ci["RelatedMbos"]["CISPEC"]:
-               if "ALNVALUE" in cispec["Attributes"]:
-                  asmObject[cispec["Attributes"]["ASSETATTRID"]["content"]] = cispec["Attributes"]["ALNVALUE"]["content"]
-
-         if "CIRELATION" in ci["RelatedMbos"]:
-            for relation in ci["RelatedMbos"]["CIRELATION"]:
-               #pass
-               relationDict = {}
-               relationDict["_fromUniqueId"] = relation["Attributes"]["SOURCECI"]["content"]
-               relationDict["_toUniqueId"] = relation["Attributes"]["TARGETCI"]["content"]
-               if("RELATIONNUM" in relation["Attributes"]):
-                  if(relation["Attributes"]["RELATIONNUM"]["content"] in relationshipMappingDict):
-                     relationDict["_edgeType"] = relationshipMappingDict[relation["Attributes"]["RELATIONNUM"]["content"]]
+      if ci["Attributes"]["STATUS"]["content"] in ciStatusList:
+         #print json.dumps(ci)
+         asmObject = {}
+         asmObject["entityTypes"] = []
+   
+         ############
+         # Add attributes to ASM object
+         ############
+   
+         for attribute in ci["Attributes"]:
+            asmObject[str(attribute)] = str(ci["Attributes"][attribute]["content"])
+            asmObject["uniqueId"] = ci["Attributes"]["CINUM"]["content"]
+            asmObject["name"] = ci["Attributes"]["CINAME"]["content"]
+            asmObject["matchTokens"] = []
+            asmObject["matchTokens"].append(ci["Attributes"]["CINAME"]["content"])
+   
+         ############
+         # Assign entityType based on entityTypeMapping configuration. If not in the mapping config file, drop
+         ############
+    
+         if str(ci["Attributes"]["CLASSSTRUCTUREID"]["content"]) in entityTypeMappingDict:
+            asmObject["entityTypes"].append(entityTypeMappingDict[ci["Attributes"]["CLASSSTRUCTUREID"]["content"]])
+         else:
+            asmObject["entityTypes"].append("ignore")
+            
+         ############
+         # Process CISPEC and CIRELATION entries
+         ############
+   
+         if "RelatedMbos" in ci:
+            if "CISPEC" in ci["RelatedMbos"]:
+               for cispec in ci["RelatedMbos"]["CISPEC"]:
+                  if "ALNVALUE" in cispec["Attributes"]:
+                     asmObject[cispec["Attributes"]["ASSETATTRID"]["content"]] = cispec["Attributes"]["ALNVALUE"]["content"]
+   
+            if "CIRELATION" in ci["RelatedMbos"]:
+               for relation in ci["RelatedMbos"]["CIRELATION"]:
+                  #pass
+                  relationDict = {}
+                  relationDict["_fromUniqueId"] = relation["Attributes"]["SOURCECI"]["content"]
+                  relationDict["_toUniqueId"] = relation["Attributes"]["TARGETCI"]["content"]
+                  if("RELATIONNUM" in relation["Attributes"]):
+                     if(relation["Attributes"]["RELATIONNUM"]["content"] in relationshipMappingDict):
+                        relationDict["_edgeType"] = relationshipMappingDict[relation["Attributes"]["RELATIONNUM"]["content"]]
+                     else:
+                        relationDict["_edgeType"] = "connectedTo"
                   else:
                      relationDict["_edgeType"] = "connectedTo"
-               else:
-                  relationDict["_edgeType"] = "connectedTo"
-
-               if(relationDict not in relationList):
-                  relationList.append(relationDict)
-
-      ciList.append(asmObject)
-      ciUniqueIdList.append(asmObject["uniqueId"])
-
+   
+                  if(relationDict not in relationList):
+                     relationList.append(relationDict)
+   
+         if("ignore" not in asmObject["entityTypes"]):
+            ciList.append(asmObject)
+            ciUniqueIdList.append(asmObject["uniqueId"])
+         else:
+            pass
+            #print "ignoring device that is not in the CI mapping file"
+      else:
+         pass
+         #print "This CI is not in the agreeable status list, ignoring"
           
 
    ciUniqueIdSet = set(ciUniqueIdList) # convert our ciUniqueIdList to a set for faster evaluation
@@ -762,6 +790,11 @@ if __name__ == '__main__':
       entityTypeMappingDict = loadEntityTypeMapping(mediatorHome + "/config/entitytype-mapping.conf")
    else:
       print "FATAL: no entity type mapping file available at " + mediatorHome + "/config/entitytype-mapping.conf"
+
+   if(os.path.isfile(mediatorHome  + "/config/status-filter.conf")):
+      ciStatusList = loadStatusFilter(mediatorHome + "/config/status-filter.conf")
+   else:
+      print "FATAL: no type mapping file available at " + mediatorHome + "/config/status-filter.conf"
 
    if(os.path.isfile(mediatorHome  + "/config/getICDData.props")):
       configVars = loadProperties(mediatorHome + "/config/getICDData.props")
