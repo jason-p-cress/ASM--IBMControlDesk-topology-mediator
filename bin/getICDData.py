@@ -594,6 +594,7 @@ def getCiData():
                #print ci["RelatedMbos"]
 
             numCi = numCi + numReturned
+            time.sleep(ciFetchPause)
             if(numCi >= totalRecords):
                #print "no more"
                isMore = 0
@@ -746,6 +747,7 @@ if __name__ == '__main__':
    global totalSnowCmdbRelationships
    global restJobId
    global startTime
+   global ciFetchPause
 
    if (not os.environ.get('PYTHONHTTPSVERIFY', '') and getattr(ssl, '_create_unverified_context', None)):
       ssl._create_default_https_context = ssl._create_unverified_context
@@ -823,6 +825,10 @@ if __name__ == '__main__':
       else:
          print("readRelationshipsFromFile not in properties file, defaulting to 0, read from ServiceNow REST API")
          readRelationshipsFromFile = 0
+      if 'ciFetchPause' in configVars.keys():
+         ciFetchPause = int(configVars['ciFetchPause'])
+      else:
+         ciFetchPause = 0
       if 'ciFetchLimit' in configVars.keys():
          global ciFetchLimit
          ciFetchLimit = int(configVars['ciFetchLimit'])
