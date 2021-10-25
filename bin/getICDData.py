@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python -u
 
 ################################################################
 #
@@ -525,8 +525,6 @@ def getCiData():
    readCiEntries = []
    writeToFile = 0
  
-   readFromRest = 1
-
    if(readCisFromFile == "1"):
       if(os.path.isfile(mediatorHome  + "/log/" + ciType + ".json")):
          with open(mediatorHome + "/log/" + ciType + ".json") as text_file:
@@ -608,12 +606,12 @@ def getCiData():
             print ciDataResult
             exit()
       
-         #print str(numCi) + " items in the cmdb ci table out of a total of " + str(totalRecords)
+         print str(numCi) + " items in the cmdb ci table out of a total of " + str(totalRecords)
 
       writeToFile = 1 
 
    if(writeToFile):
-      print "writing " + str(len(readCiEntries)) + " ci items to file"
+      print "writing " + str(len(readCiEntries)) + " raw ci items to file"
       text_file = open(mediatorHome + "/log/raw-ci.json", "w")
       text_file.write(json.dumps(readCiEntries))
       text_file.close()
@@ -678,7 +676,9 @@ def getCiData():
                      relationList.append(relationDict)
    
          if("ignore" not in asmObject["entityTypes"]):
-            ciList.append(asmObject)
+            #ciList.append(asmObject)
+            verticesFile.write("V:" + json.dumps(asmObject) + "\nW:5 millisecond" + "\n")
+            edgesFile.flush()
             ciUniqueIdList.append(asmObject["uniqueId"])
          else:
             pass
@@ -689,21 +689,24 @@ def getCiData():
           
 
    ciUniqueIdSet = set(ciUniqueIdList) # convert our ciUniqueIdList to a set for faster evaluation
+   del ciUniqueIdList
+   gc.collect()
    
-   fileObserverFile = open(mediatorHome + "/file-observer-files/icdTopology-" + datetime.datetime.now().strftime("%m%d%Y-%H%M%S") + ".txt", "w")
-   for item in ciList:
-      fileObserverFile.write("V:" + json.dumps(item) + "\nW:5 millisecond" + "\n")
-      fileObserverFile.flush()
+   #fileObserverFile = open(mediatorHome + "/file-observer-files/icdTopology-" + datetime.datetime.now().strftime("%m%d%Y-%H%M%S") + ".txt", "w")
+   #for item in ciList:
+   #   fileObserverFile.write("V:" + json.dumps(item) + "\nW:5 millisecond" + "\n")
+   #   fileObserverFile.flush()
+   
    for rel in relationList:
       if(rel["_toUniqueId"] in ciUniqueIdSet and rel["_fromUniqueId"] in ciUniqueIdSet):
-         fileObserverFile.write("E:" + json.dumps(rel) + "\nW:5 millisecond" + "\n")
-         fileObserverFile.flush()
+         edgesFile.write("E:" + json.dumps(rel) + "\nW:5 millisecond" + "\n")
+         edgesFile.flush()
 
-   print str(len(ciList)) + " CI objects found"
+   print str(len(ciUniqueIdSet)) + " CI objects found"
    print str(len(relationList)) + " relationships found"
    del readCiEntries
    gc.collect()
-   print "there are " + str(len(ciUniqueIdSet)) + " items in ciUniqueIdSet, while there are " + str(len(ciUniqueIdList)) + " items in ciCysIdList..."
+   #print "there are " + str(len(ciUniqueIdSet)) + " items in ciUniqueIdSet, while there are " + str(len(ciUniqueIdList)) + " items in ciCysIdList..."
    return()
 
 ######################################
@@ -742,6 +745,7 @@ if __name__ == '__main__':
    relTypeSet = set() 
    global totalSnowCmdbRelationships
    global restJobId
+   global startTime
 
    if (not os.environ.get('PYTHONHTTPSVERIFY', '') and getattr(ssl, '_create_unverified_context', None)):
       ssl._create_default_https_context = ssl._create_unverified_context
@@ -877,7 +881,10 @@ if __name__ == '__main__':
 
    # Begins here
 
-   startTime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+   #startTime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+   startTime=datetime.datetime.now().strftime("%m%d%Y-%H%M%S")
+   verticesFile = open(mediatorHome + "/file-observer-files/icdTopology-vertices-" + datetime.datetime.now().strftime("%m%d%Y-%H%M%S") + ".txt", "w")
+   edgesFile = open(mediatorHome + "/file-observer-files/icdTopology-edges-" + datetime.datetime.now().strftime("%m%d%Y-%H%M%S") + ".txt", "w")
    print("Start time: " + startTime)
    getCiData()
 
