@@ -636,7 +636,7 @@ def evaluateCi(ci):
          ############
    
          for attribute in ci["Attributes"]:
-            asmObject[str(attribute)] = str(ci["Attributes"][attribute]["content"])
+            asmObject[attribute] = ci["Attributes"][attribute]["content"]
             asmObject["uniqueId"] = ci["Attributes"]["CINUM"]["content"]
             asmObject["name"] = ci["Attributes"]["CINAME"]["content"]
             asmObject["matchTokens"] = []
@@ -646,7 +646,7 @@ def evaluateCi(ci):
          # Assign entityType based on entityTypeMapping configuration. If not in the mapping config file, drop
          ############
     
-         if str(ci["Attributes"]["CLASSSTRUCTUREID"]["content"]) in entityTypeMappingDict:
+         if ci["Attributes"]["CLASSSTRUCTUREID"]["content"] in entityTypeMappingDict:
             asmObject["entityTypes"].append(entityTypeMappingDict[ci["Attributes"]["CLASSSTRUCTUREID"]["content"]])
          else:
             asmObject["entityTypes"].append("ignore")
