@@ -586,13 +586,13 @@ def getCiData():
             numReturned = int(ciEntries["QueryMXOSCIResponse"]["rsCount"])
             totalRecords = int(ciEntries["QueryMXOSCIResponse"]["rsTotal"])
             currentStart = int(ciEntries["QueryMXOSCIResponse"]["rsStart"])
+            if(writeToFile):
+               text_file = open(mediatorHome + "/log/raw-ci.json", "a")
+               text_file.write(json.dumps(ciEntries))
+               text_file.write("\n")
+               text_file.close()
             for ci in ciEntries["QueryMXOSCIResponse"]["MXOSCISet"]["CI"]:
                #print "adding " + ci["name"] + " to readCiEntries..."
-               if(writeToFile):
-                  text_file = open(mediatorHome + "/log/raw-ci.json", "a")
-                  text_file.write(json.dumps(ciEntries))
-                  text_file.write("\n")
-                  text_file.close()
                evaluateCi(ci)
                #readCiEntries.append(ci)
                #print ci["Attributes"]["CINAME"]["content"] + " -=- " + ci["Attributes"]["CLASSSTRUCTUREID"]["content"]
@@ -646,10 +646,13 @@ def evaluateCi(ci):
          # Assign entityType based on entityTypeMapping configuration. If not in the mapping config file, drop
          ############
     
-         if ci["Attributes"]["CLASSSTRUCTUREID"]["content"] in entityTypeMappingDict:
-            asmObject["entityTypes"].append(entityTypeMappingDict[ci["Attributes"]["CLASSSTRUCTUREID"]["content"]])
+         if(ci["Attributes"]["CLASSSTRUCTUREID"]):
+            if ci["Attributes"]["CLASSSTRUCTUREID"]["content"] in entityTypeMappingDict:
+               asmObject["entityTypes"].append(entityTypeMappingDict[ci["Attributes"]["CLASSSTRUCTUREID"]["content"]])
+            else:
+               asmObject["entityTypes"].append("ignore")
          else:
-            asmObject["entityTypes"].append("ignore")
+            print "WARNING: found CI that does not have an associated CLASSSTRUCTUREID:"
             
          ############
          # Process CISPEC and CIRELATION entries
