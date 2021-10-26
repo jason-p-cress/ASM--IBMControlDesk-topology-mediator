@@ -23,6 +23,7 @@ import urllib2
 import urllib
 from collections import defaultdict
 from multiprocessing import Process
+import sys
 
 ##############
 #
@@ -519,11 +520,10 @@ def getCiData():
    ###################################################
 
    global ciUniqueIdSet
-   global ciUniqueIdList
    global readCisFromFile
 
    readCiEntries = []
-   writeToFile = 0
+   writeToFile = 1
  
    if(readCisFromFile == "1"):
       if(os.path.isfile(mediatorHome  + "/log/" + ciType + ".json")):
@@ -588,7 +588,13 @@ def getCiData():
             currentStart = int(ciEntries["QueryMXOSCIResponse"]["rsStart"])
             for ci in ciEntries["QueryMXOSCIResponse"]["MXOSCISet"]["CI"]:
                #print "adding " + ci["name"] + " to readCiEntries..."
-               readCiEntries.append(ci)
+               if(writeToFile):
+                  text_file = open(mediatorHome + "/log/raw-ci.json", "a")
+                  text_file.write(json.dumps(ciEntries))
+                  text_file.write("\n")
+                  text_file.close()
+               evaluateCi(ci)
+               #readCiEntries.append(ci)
                #print ci["Attributes"]["CINAME"]["content"] + " -=- " + ci["Attributes"]["CLASSSTRUCTUREID"]["content"]
                #print "RELATIONSHIPS:" 
                #print ci["RelatedMbos"]
@@ -609,20 +615,16 @@ def getCiData():
       
          print str(numCi) + " items in the cmdb ci table out of a total of " + str(totalRecords)
 
-      writeToFile = 1 
 
-   if(writeToFile):
-      print "writing " + str(len(readCiEntries)) + " raw ci items to file"
-      text_file = open(mediatorHome + "/log/raw-ci.json", "w")
-      text_file.write(json.dumps(readCiEntries))
-      text_file.close()
-      
-      
+   
+def evaluateCi(ci):
+
    ############
    # Grab additional data (cispec and relationships) and build ciList and relationshipList
    ############
-   
-   for ci in readCiEntries:
+
+   if(1==1):
+   #for ci in readCiEntries:
 
       if ci["Attributes"]["STATUS"]["content"] in ciStatusList:
          #print json.dumps(ci)
@@ -673,39 +675,48 @@ def getCiData():
                   else:
                      relationDict["_edgeType"] = "connectedTo"
    
-                  if(relationDict not in relationList):
-                     relationList.append(relationDict)
+                  tempEdgesFile.write(json.dumps(relationDict) + "\n")
+                  tempEdgesFile.flush()
+                  
+                  #if(relationDict not in relationList):
+                  #   relationList.append(relationDict)
    
          if("ignore" not in asmObject["entityTypes"]):
             #ciList.append(asmObject)
             verticesFile.write("V:" + json.dumps(asmObject) + "\nW:5 millisecond" + "\n")
-            edgesFile.flush()
-            ciUniqueIdList.append(asmObject["uniqueId"])
+            verticesFile.flush()
+            ciUniqueIdSet.add(asmObject["uniqueId"])
+            print("Number of items in ciUniqueIdSet is " + str(len(ciUniqueIdSet)) + ", and memsize of ciUniqueIdSet is " + str(sys.getsizeof(ciUniqueIdSet)) + " bytes.")
          else:
             pass
             #print "ignoring device that is not in the CI mapping file"
       else:
          pass
          #print "This CI is not in the agreeable status list, ignoring"
-          
+      
+def evaluateRelationships():          
 
-   ciUniqueIdSet = set(ciUniqueIdList) # convert our ciUniqueIdList to a set for faster evaluation
-   del ciUniqueIdList
-   gc.collect()
+   print "Data collection complete. Analyzing relationships and building edges file..."
+   numRelations = 0
+
+   with open(mediatorHome + "/log/tempEdgesFile.json") as fp:
+      for line in fp:
+         if(validateJson(line)):
+            relationship = json.loads(line)
+            if(relationship["_toUniqueId"] in ciUniqueIdSet and relationship["_fromUniqueId"] in ciUniqueIdSet):
+               edgesFile.write("E:" + json.dumps(relationship) + "\nW:5 millisecond" + "\n")
+               edgesFile.flush()
+               numRelations = numRelations + 1
+         else:
+            print "malformed line in temporary relationship file"
    
-   #fileObserverFile = open(mediatorHome + "/file-observer-files/icdTopology-" + datetime.datetime.now().strftime("%m%d%Y-%H%M%S") + ".txt", "w")
-   #for item in ciList:
-   #   fileObserverFile.write("V:" + json.dumps(item) + "\nW:5 millisecond" + "\n")
-   #   fileObserverFile.flush()
-   
-   for rel in relationList:
-      if(rel["_toUniqueId"] in ciUniqueIdSet and rel["_fromUniqueId"] in ciUniqueIdSet):
-         edgesFile.write("E:" + json.dumps(rel) + "\nW:5 millisecond" + "\n")
-         edgesFile.flush()
+#   for rel in relationList:
+#      if(rel["_toUniqueId"] in ciUniqueIdSet and rel["_fromUniqueId"] in ciUniqueIdSet):
+#         edgesFile.write("E:" + json.dumps(rel) + "\nW:5 millisecond" + "\n")
+#         edgesFile.flush()
 
    print str(len(ciUniqueIdSet)) + " CI objects found"
-   print str(len(relationList)) + " relationships found"
-   del readCiEntries
+   print str(numRelations) + " relationships found"
    gc.collect()
    #print "there are " + str(len(ciUniqueIdSet)) + " items in ciUniqueIdSet, while there are " + str(len(ciUniqueIdList)) + " items in ciCysIdList..."
    return()
@@ -887,11 +898,17 @@ if __name__ == '__main__':
 
    # Begins here
 
-   #startTime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+   if(os.path.exists(mediatorHome + "/log/raw-ci.json")):
+      os.remove(mediatorHome + "/log/raw-ci.json")
    startTime=datetime.datetime.now().strftime("%m%d%Y-%H%M%S")
    verticesFile = open(mediatorHome + "/file-observer-files/icdTopology-vertices-" + datetime.datetime.now().strftime("%m%d%Y-%H%M%S") + ".txt", "w")
+   tempEdgesFile = open(mediatorHome + "/log/tempEdgesFile.json", "w")
    edgesFile = open(mediatorHome + "/file-observer-files/icdTopology-edges-" + datetime.datetime.now().strftime("%m%d%Y-%H%M%S") + ".txt", "w")
    print("Start time: " + startTime)
    getCiData()
+   tempEdgesFile.close()
+   evaluateRelationships()
+   endTime=datetime.datetime.now().strftime("%m%d%Y-%H%M%S")
+   print("End time: " + endTime)
 
    exit()
