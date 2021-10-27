@@ -525,7 +525,8 @@ def fetchRestData(offset, page, rsStart, maxItems):
    authHeader = 'Basic ' + base64.b64encode(icdServerDict["user"] + ":" + icdServerDict["password"])
    method = "GET"
 
-   requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
+   requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?' + statusFilter + '&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
+   #requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
 
    print "My query URL is: " + requestUrl
 
@@ -594,7 +595,7 @@ def getCiData():
             numReturned = int(ciEntries["QueryMXOSCIResponse"]["rsCount"])
             totalRecords = int(ciEntries["QueryMXOSCIResponse"]["rsTotal"])
             currentStart = int(ciEntries["QueryMXOSCIResponse"]["rsStart"])
-            if(saveCisToFile == 1 and readCisFromFile == 0):
+            if(saveCisToFile == "1" and readCisFromFile == "0"):
                text_file = open(mediatorHome + "/log/raw-ci.json", "a")
                text_file.write(json.dumps(ciEntries))
                text_file.write("\n")
@@ -821,11 +822,18 @@ if __name__ == '__main__':
       entityTypeMappingDict = loadEntityTypeMapping(mediatorHome + "/config/entitytype-mapping.conf")
    else:
       print "FATAL: no entity type mapping file available at " + mediatorHome + "/config/entitytype-mapping.conf"
+      exit()
 
    if(os.path.isfile(mediatorHome  + "/config/status-filter.conf")):
       ciStatusList = loadStatusFilter(mediatorHome + "/config/status-filter.conf")
+      global statusFilter
+      statusFilter = ""
+      for filter in ciStatusList:
+         statusFilter = statusFilter + "=~eq~" + urllib.quote(filter)
+         
    else:
-      print "FATAL: no type mapping file available at " + mediatorHome + "/config/status-filter.conf"
+      print "FATAL: no status filter file available at " + mediatorHome + "/config/status-filter.conf"
+      exit()
 
    if(os.path.isfile(mediatorHome  + "/config/getICDData.props")):
       configVars = loadProperties(mediatorHome + "/config/getICDData.props")
@@ -833,7 +841,7 @@ if __name__ == '__main__':
       if 'saveCisToFile' in configVars.keys():
          global saveCisToFile
          saveCisToFile = configVars['saveCisToFile']
-         if(saveCisToFile == 1):
+         if(saveCisToFile == "1"):
             print "will save raw json to file"
             if(os.path.exists(mediatorHome + "/log/raw-ci.json")):
                os.remove(mediatorHome + "/log/raw-ci.json")
