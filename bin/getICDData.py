@@ -511,22 +511,30 @@ def getTotalRelCount():
    print("Found " + relCountResultDict["result"]["stats"]["count"])
    return(int(relCountResultDict["result"]["stats"]["count"]))
 
-def fetchFileData(linenum):
-   with open (mediatorHome + "/log/raw-ci.json") as rawFp:
-      for index, line in enumerate(rawFp):
-         if(index == linenum):
-            return line
-            break
-   return(False)
+def fetchFileData(classStructureId, linenum):
+   if(os.path.exists(mediatorHome + "/log/" + classStructureId + "-raw-ci.json")):
+      with open (mediatorHome + "/log/" + classStructureId + "-raw-ci.json") as rawFp:
+         for index, line in enumerate(rawFp):
+            if(index == linenum):
+               return line
+               break
+      return(False)
+   else:
+      print "no file data found for CLASSSTRUCTUREID: " + classStructureId
+      return(False)
       
    
-def fetchRestData(offset, page, rsStart, maxItems):
+def fetchRestData(classStructureId, offset, page, rsStart, maxItems):
 
    authHeader = 'Basic ' + base64.b64encode(icdServerDict["user"] + ":" + icdServerDict["password"])
    method = "GET"
 
-   requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?' + statusFilter + '&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
+   if(statusFilter == ""):
+      requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?classstructureid=~eq~' + classStructureId + '&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
+   else:
+      requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?' + statusFilter + '&classstructureid=~eq~' + classStructureId + '&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
    #requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
+   #requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?status=~eq~operating&classstructureid=~eq~RBA_APPSERVER&classstructureid=~eq~CCI00011&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
 
    print "My query URL is: " + requestUrl
 
@@ -553,7 +561,7 @@ def fetchRestData(offset, page, rsStart, maxItems):
 
    return(ciDataResult)
  
-def getCiData():
+def getCiData(classStructureId):
 
    ###################################################
    #
@@ -561,13 +569,17 @@ def getCiData():
    #
    ###################################################
 
+   if(readCisFromFile == "0"):
+      print "Fetching data for CLASSSTRUCTUREID " + classStructureId
+
    global ciUniqueIdSet
-   global readCisFromFile
+   #global readCisFromFile
 
    readCiEntries = []
 
    if(1==1):
  
+      totalRecords = 0
       linenum = 0
       numCi = 0
       isMore = 1
@@ -580,9 +592,9 @@ def getCiData():
       while(isMore):
 
          if(readCisFromFile == "0"):
-            ciDataResult = fetchRestData(offset, page, rsStart, maxItems)
+            ciDataResult = fetchRestData(classStructureId, offset, page, rsStart, maxItems)
          else:
-            ciDataResult = fetchFileData(linenum)
+            ciDataResult = fetchFileData(classStructureId, linenum)
             linenum = linenum + 1
             if not ciDataResult:
                break
@@ -591,33 +603,40 @@ def getCiData():
          #print "Result is: " + str(ciDataResult)
          if(validateJson(ciDataResult)):
             ciEntries = json.loads(ciDataResult)
-            print "Number of CI entries for this fetch is: " + str(len(ciEntries["QueryMXOSCIResponse"]["MXOSCISet"]["CI"]))
-            numReturned = int(ciEntries["QueryMXOSCIResponse"]["rsCount"])
-            totalRecords = int(ciEntries["QueryMXOSCIResponse"]["rsTotal"])
-            currentStart = int(ciEntries["QueryMXOSCIResponse"]["rsStart"])
-            if(saveCisToFile == "1" and readCisFromFile == "0"):
-               text_file = open(mediatorHome + "/log/raw-ci.json", "a")
-               text_file.write(json.dumps(ciEntries))
-               text_file.write("\n")
-               text_file.close()
-            for ci in ciEntries["QueryMXOSCIResponse"]["MXOSCISet"]["CI"]:
-               #print "adding " + ci["name"] + " to readCiEntries..."
-               evaluateCi(ci)
-               #readCiEntries.append(ci)
-               #print ci["Attributes"]["CINAME"]["content"] + " -=- " + ci["Attributes"]["CLASSSTRUCTUREID"]["content"]
-               #print "RELATIONSHIPS:" 
-               #print ci["RelatedMbos"]
-
-            numCi = numCi + numReturned
-            time.sleep(ciFetchPause)
-            print "numCi is " + str(numCi) + ", totalRecords is " + str(totalRecords)
-            if(numCi >= totalRecords):
-               #print "no more"
-               isMore = 0
+            if(ciEntries["QueryMXOSCIResponse"]["MXOSCISet"].has_key("CI")):
+               print "Number of CI entries for this fetch is: " + str(len(ciEntries["QueryMXOSCIResponse"]["MXOSCISet"]["CI"]))
+               numReturned = int(ciEntries["QueryMXOSCIResponse"]["rsCount"])
+               totalRecords = int(ciEntries["QueryMXOSCIResponse"]["rsTotal"])
+               currentStart = int(ciEntries["QueryMXOSCIResponse"]["rsStart"])
+               if(saveCisToFile == "1" and readCisFromFile == "0"):
+                  text_file = open(mediatorHome + "/log/" + classStructureId + "-raw-ci.json", "a")
+                  text_file.write(json.dumps(ciEntries))
+                  text_file.write("\n")
+                  text_file.close()
+               for ci in ciEntries["QueryMXOSCIResponse"]["MXOSCISet"]["CI"]:
+                  #print "adding " + ci["name"] + " to readCiEntries..."
+                  evaluateCi(ci)
+                  #readCiEntries.append(ci)
+                  #print ci["Attributes"]["CINAME"]["content"] + " -=- " + ci["Attributes"]["CLASSSTRUCTUREID"]["content"]
+                  #print "RELATIONSHIPS:" 
+                  #print ci["RelatedMbos"]
+   
+               numCi = numCi + numReturned
+               time.sleep(ciFetchPause)
+               print "numCi is " + str(numCi) + ", totalRecords is " + str(totalRecords)
+               if(numCi >= totalRecords):
+                  #print "no more"
+                  isMore = 0
+               else:
+                  #print "is more"
+                  rsStart = currentStart + ciFetchLimit
+                  isMore = 1
             else:
-               #print "is more"
-               rsStart = currentStart + ciFetchLimit
-               isMore = 1
+               print "Query returned no records. We recieved:"
+               print ciDataResult
+               print "Status filter is " + statusFilter + " and CLASSSTRUCTUREID=" + classStructureId
+               return
+               #print "Query used: " + icdServerDict["server"] + '/maxrest/rest/os/mxosci/?' + statusFilter + '&' + classStructureIdFilter + '&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
          else:
             print "invalid JSON returned. We got:"
             print ciDataResult
@@ -636,7 +655,8 @@ def evaluateCi(ci):
    if(1==1):
    #for ci in readCiEntries:
 
-      if ci["Attributes"]["STATUS"]["content"] in ciStatusList:
+      #if ci["Attributes"]["STATUS"]["content"] in ciStatusList:
+      if(1==1):
          #print json.dumps(ci)
          asmObject = {}
          asmObject["entityTypes"] = []
@@ -820,20 +840,29 @@ if __name__ == '__main__':
 
    if(os.path.isfile(mediatorHome  + "/config/entitytype-mapping.conf")):
       entityTypeMappingDict = loadEntityTypeMapping(mediatorHome + "/config/entitytype-mapping.conf")
+      global classStructureIdFilter
+      classStructureIdFilter = ""
+      for item in entityTypeMappingDict:
+         classStructureIdFilter = classStructureIdFilter + "classstructureid=~eq~" + urllib.quote(item)
+         classStructureIdFilter = classStructureIdFilter + "&"
+      classStructureIdFilter = classStructureIdFilter.rstrip(classStructureIdFilter[-1])
    else:
       print "FATAL: no entity type mapping file available at " + mediatorHome + "/config/entitytype-mapping.conf"
       exit()
 
    if(os.path.isfile(mediatorHome  + "/config/status-filter.conf")):
+      print "loading status filter"
       ciStatusList = loadStatusFilter(mediatorHome + "/config/status-filter.conf")
       global statusFilter
       statusFilter = ""
       for filter in ciStatusList:
-         statusFilter = statusFilter + "=~eq~" + urllib.quote(filter)
+         statusFilter = statusFilter + "status=~eq~" + urllib.quote(filter)
+         statusFilter = statusFilter + "&"
+      statusFilter = statusFilter.rstrip(statusFilter[-1])
          
    else:
-      print "FATAL: no status filter file available at " + mediatorHome + "/config/status-filter.conf"
-      exit()
+      print "WARNING: no status filter file available at " + mediatorHome + "/config/status-filter.conf. Will include CIs with any STATUS. This may not be what you want!!"
+      statusFilter = ""
 
    if(os.path.isfile(mediatorHome  + "/config/getICDData.props")):
       configVars = loadProperties(mediatorHome + "/config/getICDData.props")
@@ -843,8 +872,6 @@ if __name__ == '__main__':
          saveCisToFile = configVars['saveCisToFile']
          if(saveCisToFile == "1"):
             print "will save raw json to file"
-            if(os.path.exists(mediatorHome + "/log/raw-ci.json")):
-               os.remove(mediatorHome + "/log/raw-ci.json")
       if 'readCisFromFile' in configVars.keys():
          global readCisFromFile
          readCisFromFile = configVars['readCisFromFile']
@@ -932,7 +959,11 @@ if __name__ == '__main__':
    tempEdgesFile = open(mediatorHome + "/log/tempEdgesFile.json", "w")
    edgesFile = open(mediatorHome + "/file-observer-files/icdTopology-edges-" + datetime.datetime.now().strftime("%m%d%Y-%H%M%S") + ".txt", "w")
    print("Start time: " + startTime)
-   getCiData()
+   for classStructureId in entityTypeMappingDict:
+      if(saveCisToFile == "1" and readCisFromFile == "0"):
+         if(os.path.exists(mediatorHome + "/log/" + classStructureId + "-raw-ci.json")):
+            os.remove(mediatorHome + "/log/" + classStructureId + "-raw-ci.json")
+      getCiData(classStructureId)
    tempEdgesFile.close()
    evaluateRelationships()
    endTime=datetime.datetime.now().strftime("%m%d%Y-%H%M%S")
