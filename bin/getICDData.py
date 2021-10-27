@@ -8,6 +8,7 @@
 #
 ################################################################
 
+import linecache
 from httplib import IncompleteRead
 import time
 import datetime
@@ -510,6 +511,46 @@ def getTotalRelCount():
    print("Found " + relCountResultDict["result"]["stats"]["count"])
    return(int(relCountResultDict["result"]["stats"]["count"]))
 
+def fetchFileData(linenum):
+   with open (mediatorHome + "/log/raw-ci.json") as rawFp:
+      for index, line in enumerate(rawFp):
+         if(index == linenum):
+            return line
+            break
+   return(False)
+      
+   
+def fetchRestData(offset, page, rsStart, maxItems):
+
+   authHeader = 'Basic ' + base64.b64encode(icdServerDict["user"] + ":" + icdServerDict["password"])
+   method = "GET"
+
+   requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
+
+   print "My query URL is: " + requestUrl
+
+   try:
+      request = urllib2.Request(requestUrl)
+      request.add_header("Content-Type",'application/json')
+      request.add_header("Accept",'application/json')
+      request.add_header("Authorization",authHeader)
+      request.get_method = lambda: method
+
+      response = urllib2.urlopen(request)
+      ciDataResult = response.read()
+
+   except IOError, e:
+      print 'Failed to open "%s".' % requestUrl
+      if hasattr(e, 'code'):
+         print 'We failed with error code - %s.' % e.code
+      elif hasattr(e, 'reason'):
+         print "The error object has the following 'reason' attribute :"
+         print e.reason
+         print "This usually means the server doesn't exist,",
+         print "is down, or we don't have an internet connection."
+      return False
+
+   return(ciDataResult)
  
 def getCiData():
 
@@ -523,27 +564,11 @@ def getCiData():
    global readCisFromFile
 
    readCiEntries = []
-   writeToFile = 1
- 
-   if(readCisFromFile == "1"):
-      if(os.path.isfile(mediatorHome  + "/log/" + ciType + ".json")):
-         with open(mediatorHome + "/log/" + ciType + ".json") as text_file:
-            completeResult = text_file.read()
-            text_file.close()
-         readCiEntries = json.loads(completeResult)
-         del completeResult
-         gc.collect()
-         readFromRest = 0
-      else:
-         print "NOTE: read from file selected, yet file for ciType " + ciType + " does not exist. Reading from REST API."
-         readFromRest = 1 
-   else:
-      readFromRest = 1
 
-   if(readFromRest == 1):
+   if(1==1):
+ 
+      linenum = 0
       numCi = 0
-      authHeader = 'Basic ' + base64.b64encode(icdServerDict["user"] + ":" + icdServerDict["password"])
-      method = "GET"
       isMore = 1
       offset = 0
       firstRun = 1
@@ -552,41 +577,24 @@ def getCiData():
       maxItems = ciFetchLimit
    
       while(isMore):
-   
-         #requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?_lid=FRANK&_lpwd=ICD761Demo1&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
-         requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
-         #requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
 
-         print "My query URL is: " + requestUrl
-
-         try:
-            request = urllib2.Request(requestUrl)
-            request.add_header("Content-Type",'application/json')
-            request.add_header("Accept",'application/json')
-            request.add_header("Authorization",authHeader)
-            request.get_method = lambda: method
-      
-            response = urllib2.urlopen(request)
-            ciDataResult = response.read()
-      
-         except IOError, e:
-            print 'Failed to open "%s".' % requestUrl
-            if hasattr(e, 'code'):
-               print 'We failed with error code - %s.' % e.code
-            elif hasattr(e, 'reason'):
-               print "The error object has the following 'reason' attribute :"
-               print e.reason
-               print "This usually means the server doesn't exist,",
-               print "is down, or we don't have an internet connection."
-            return False
+         if(readCisFromFile == "0"):
+            ciDataResult = fetchRestData(offset, page, rsStart, maxItems)
+         else:
+            ciDataResult = fetchFileData(linenum)
+            linenum = linenum + 1
+            if not ciDataResult:
+               break
+         
       
          #print "Result is: " + str(ciDataResult)
          if(validateJson(ciDataResult)):
             ciEntries = json.loads(ciDataResult)
+            print "Number of CI entries for this fetch is: " + str(len(ciEntries["QueryMXOSCIResponse"]["MXOSCISet"]["CI"]))
             numReturned = int(ciEntries["QueryMXOSCIResponse"]["rsCount"])
             totalRecords = int(ciEntries["QueryMXOSCIResponse"]["rsTotal"])
             currentStart = int(ciEntries["QueryMXOSCIResponse"]["rsStart"])
-            if(writeToFile):
+            if(saveCisToFile == 1 and readCisFromFile == 0):
                text_file = open(mediatorHome + "/log/raw-ci.json", "a")
                text_file.write(json.dumps(ciEntries))
                text_file.write("\n")
@@ -601,6 +609,7 @@ def getCiData():
 
             numCi = numCi + numReturned
             time.sleep(ciFetchPause)
+            print "numCi is " + str(numCi) + ", totalRecords is " + str(totalRecords)
             if(numCi >= totalRecords):
                #print "no more"
                isMore = 0
@@ -646,13 +655,16 @@ def evaluateCi(ci):
          # Assign entityType based on entityTypeMapping configuration. If not in the mapping config file, drop
          ############
     
-         if(ci["Attributes"]["CLASSSTRUCTUREID"]):
+         if(ci["Attributes"].has_key("CLASSSTRUCTUREID")):
             if ci["Attributes"]["CLASSSTRUCTUREID"]["content"] in entityTypeMappingDict:
                asmObject["entityTypes"].append(entityTypeMappingDict[ci["Attributes"]["CLASSSTRUCTUREID"]["content"]])
             else:
                asmObject["entityTypes"].append("ignore")
          else:
             print "WARNING: found CI that does not have an associated CLASSSTRUCTUREID:"
+            print json.dumps(ci)
+            asmObject["entityTypes"].append("ignore")
+            #exit()
             
          ############
          # Process CISPEC and CIRELATION entries
@@ -694,8 +706,8 @@ def evaluateCi(ci):
             pass
             #print "ignoring device that is not in the CI mapping file"
       else:
-         pass
          #print "This CI is not in the agreeable status list, ignoring"
+         pass
       
 def evaluateRelationships():          
 
@@ -755,7 +767,6 @@ if __name__ == '__main__':
    relationList = []
    global entityTypeMappingDict
    entityTypeMappingDict = {}
-   global writeToFile
    global relTypeSet
    relTypeSet = set() 
    global totalSnowCmdbRelationships
@@ -819,6 +830,13 @@ if __name__ == '__main__':
    if(os.path.isfile(mediatorHome  + "/config/getICDData.props")):
       configVars = loadProperties(mediatorHome + "/config/getICDData.props")
       print str(configVars)
+      if 'saveCisToFile' in configVars.keys():
+         global saveCisToFile
+         saveCisToFile = configVars['saveCisToFile']
+         if(saveCisToFile == 1):
+            print "will save raw json to file"
+            if(os.path.exists(mediatorHome + "/log/raw-ci.json")):
+               os.remove(mediatorHome + "/log/raw-ci.json")
       if 'readCisFromFile' in configVars.keys():
          global readCisFromFile
          readCisFromFile = configVars['readCisFromFile']
@@ -901,8 +919,6 @@ if __name__ == '__main__':
 
    # Begins here
 
-   if(os.path.exists(mediatorHome + "/log/raw-ci.json")):
-      os.remove(mediatorHome + "/log/raw-ci.json")
    startTime=datetime.datetime.now().strftime("%m%d%Y-%H%M%S")
    verticesFile = open(mediatorHome + "/file-observer-files/icdTopology-vertices-" + datetime.datetime.now().strftime("%m%d%Y-%H%M%S") + ".txt", "w")
    tempEdgesFile = open(mediatorHome + "/log/tempEdgesFile.json", "w")
