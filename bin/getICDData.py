@@ -8,6 +8,7 @@
 #
 ################################################################
 
+import unicodedata
 import linecache
 from httplib import IncompleteRead
 import time
@@ -28,6 +29,16 @@ import sys
 
 ##############
 #
+# Function to sanitize strings used for web URL query
+#
+#####################################################
+
+def sanitizeString(s):
+#   return "".join(ch for ch in s if unicodedata.category(ch)[0]!="C")
+   return(re.sub(r'[\x00-\x1f\x7f-\x9f]', '', s))
+
+##############
+#
 # Simple function to validate json
 #
 ##################################
@@ -38,7 +49,6 @@ def validateJson(jsonData):
     except ValueError as err:
         return False
     return True
-
 
 ##############
 #
@@ -843,7 +853,7 @@ if __name__ == '__main__':
       global classStructureIdFilter
       classStructureIdFilter = ""
       for item in entityTypeMappingDict:
-         classStructureIdFilter = classStructureIdFilter + "classstructureid=~eq~" + urllib.quote(item)
+         classStructureIdFilter = classStructureIdFilter + "classstructureid=~eq~" + sanitizeString(urllib.quote(item))
          classStructureIdFilter = classStructureIdFilter + "&"
       classStructureIdFilter = classStructureIdFilter.rstrip(classStructureIdFilter[-1])
    else:
@@ -856,7 +866,7 @@ if __name__ == '__main__':
       global statusFilter
       statusFilter = ""
       for filter in ciStatusList:
-         statusFilter = statusFilter + "status=~eq~" + urllib.quote(filter)
+         statusFilter = statusFilter + "status=~eq~" + sanitizeString(urllib.quote(filter))
          statusFilter = statusFilter + "&"
       statusFilter = statusFilter.rstrip(statusFilter[-1])
          
