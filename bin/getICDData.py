@@ -534,7 +534,7 @@ def fetchFileData(classStructureId, linenum):
       return(False)
       
    
-def fetchRestData(classStructureId, offset, page, rsStart, maxItems):
+def fetchRestData(classStructureId, statusFilter, offset, page, rsStart, maxItems):
 
    authHeader = 'Basic ' + base64.b64encode(icdServerDict["user"] + ":" + icdServerDict["password"])
    method = "GET"
@@ -571,7 +571,7 @@ def fetchRestData(classStructureId, offset, page, rsStart, maxItems):
 
    return(ciDataResult)
  
-def getCiData(classStructureId):
+def getCiData(classStructureId, statusFilter):
 
    ###################################################
    #
@@ -602,7 +602,7 @@ def getCiData(classStructureId):
       while(isMore):
 
          if(readCisFromFile == "0"):
-            ciDataResult = fetchRestData(classStructureId, offset, page, rsStart, maxItems)
+            ciDataResult = fetchRestData(classStructureId, statusFilter, offset, page, rsStart, maxItems)
          else:
             ciDataResult = fetchFileData(classStructureId, linenum)
             linenum = linenum + 1
@@ -615,6 +615,7 @@ def getCiData(classStructureId):
             ciEntries = json.loads(ciDataResult)
             if(ciEntries["QueryMXOSCIResponse"]["MXOSCISet"].has_key("CI")):
                print "Number of CI entries for this fetch is: " + str(len(ciEntries["QueryMXOSCIResponse"]["MXOSCISet"]["CI"]))
+               print("Number of items in ciUniqueIdSet is " + str(len(ciUniqueIdSet)) + ", and memsize of ciUniqueIdSet is " + str(sys.getsizeof(ciUniqueIdSet)) + " bytes.")
                numReturned = int(ciEntries["QueryMXOSCIResponse"]["rsCount"])
                totalRecords = int(ciEntries["QueryMXOSCIResponse"]["rsTotal"])
                currentStart = int(ciEntries["QueryMXOSCIResponse"]["rsStart"])
@@ -720,6 +721,8 @@ def evaluateCi(ci):
                         relationDict["_edgeType"] = "connectedTo"
                   else:
                      relationDict["_edgeType"] = "connectedTo"
+
+                  relationDict["originalRelationNum"] = relation["Attributes"]["RELATIONNUM"]["content"]
    
                   tempEdgesFile.write(json.dumps(relationDict) + "\n")
                   tempEdgesFile.flush()
@@ -732,7 +735,6 @@ def evaluateCi(ci):
             verticesFile.write("V:" + json.dumps(asmObject) + "\nW:5 millisecond" + "\n")
             verticesFile.flush()
             ciUniqueIdSet.add(asmObject["uniqueId"])
-            print("Number of items in ciUniqueIdSet is " + str(len(ciUniqueIdSet)) + ", and memsize of ciUniqueIdSet is " + str(sys.getsizeof(ciUniqueIdSet)) + " bytes.")
          else:
             pass
             #print "ignoring device that is not in the CI mapping file"
@@ -973,7 +975,11 @@ if __name__ == '__main__':
       if(saveCisToFile == "1" and readCisFromFile == "0"):
          if(os.path.exists(mediatorHome + "/log/" + classStructureId + "-raw-ci.json")):
             os.remove(mediatorHome + "/log/" + classStructureId + "-raw-ci.json")
-      getCiData(classStructureId)
+         for statusFilter in ciStatusList:
+            getCiData(classStructureId, statusFilter)
+      else:
+         getCiData(classStructureId, "not applicable")
+
    tempEdgesFile.close()
    evaluateRelationships()
    endTime=datetime.datetime.now().strftime("%m%d%Y-%H%M%S")
