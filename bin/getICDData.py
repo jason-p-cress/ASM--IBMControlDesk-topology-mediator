@@ -35,6 +35,7 @@ import sys
 
 def sanitizeString(s):
 #   return "".join(ch for ch in s if unicodedata.category(ch)[0]!="C")
+   sanitizedString = s.decode("utf-8-sig").encode("utf-8")
    return(re.sub(r'[\x00-\x1f\x7f-\x9f]', '', s))
 
 ##############
