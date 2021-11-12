@@ -490,52 +490,10 @@ def createAsmConnection(connectionDict, jobId):
          print "is down, or we don't have an internet connection."
       return False
 
-def getTotalRelCount():
-
-   method = 'GET'
-   requestUrl = 'https://' + snowServerDict["server"] + '/api/now/stats/cmdb_rel_ci?sysparm_count=true'
-   print("issuing relationship count query: " + requestUrl)
-   authHeader = 'Basic ' + base64.b64encode(snowServerDict["user"] + ":" + snowServerDict["password"])
-     
-   try:
-      request = urllib2.Request(requestUrl)
-      request.add_header("Content-Type",'application/json')
-      request.add_header("Accept",'application/json')
-      request.add_header("Authorization",authHeader)
-      request.get_method = lambda: method
-
-      response = urllib2.urlopen(request)
-      relCountResult = response.read()
-
-   except IOError, e:
-      print 'Failed to open "%s".' % requestUrl
-      if hasattr(e, 'code'):
-         print 'We failed with error code - %s.' % e.code
-      elif hasattr(e, 'reason'):
-         print "The error object has the following 'reason' attribute :"
-         print e.reason
-         print "This usually means the server doesn't exist,",
-         print "is down, or we don't have an internet connection."
-
-
-   relCountResultDict = json.loads(relCountResult)
-   print("Found " + relCountResultDict["result"]["stats"]["count"])
-   return(int(relCountResultDict["result"]["stats"]["count"]))
-
-def fetchFileData(classStructureId, linenum):
-   if(os.path.exists(mediatorHome + "/log/" + classStructureId + "-raw-ci.json")):
-      with open (mediatorHome + "/log/" + classStructureId + "-raw-ci.json") as rawFp:
-         for index, line in enumerate(rawFp):
-            if(index == linenum):
-               return line
-               break
-      return(False)
-   else:
-      print "no file data found for CLASSSTRUCTUREID: " + classStructureId
-      return(False)
-      
-   
 def fetchRestData(classStructureId, statusFilter, offset, page, rsStart, maxItems):
+
+
+   httpQueryRetries = 3
 
    authHeader = 'Basic ' + base64.b64encode(icdServerDict["user"] + ":" + icdServerDict["password"])
    method = "GET"
@@ -543,34 +501,42 @@ def fetchRestData(classStructureId, statusFilter, offset, page, rsStart, maxItem
    if(statusFilter == ""):
       requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?classstructureid=~eq~' + classStructureId + '&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
    else:
-      requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?' + statusFilter + '&classstructureid=~eq~' + classStructureId + '&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
+      requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?status=~eq~' + statusFilter + '&classstructureid=~eq~' + classStructureId + '&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
    #requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
    #requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?status=~eq~operating&classstructureid=~eq~RBA_APPSERVER&classstructureid=~eq~CCI00011&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
 
    print "My query URL is: " + requestUrl
 
-   try:
-      request = urllib2.Request(requestUrl)
-      request.add_header("Content-Type",'application/json')
-      request.add_header("Accept",'application/json')
-      request.add_header("Authorization",authHeader)
-      request.get_method = lambda: method
+   retryCount = 0
 
-      response = urllib2.urlopen(request)
-      ciDataResult = response.read()
-
-   except IOError, e:
-      print 'Failed to open "%s".' % requestUrl
-      if hasattr(e, 'code'):
-         print 'We failed with error code - %s.' % e.code
-      elif hasattr(e, 'reason'):
-         print "The error object has the following 'reason' attribute :"
-         print e.reason
-         print "This usually means the server doesn't exist,",
-         print "is down, or we don't have an internet connection."
+   while(retryCount < httpQueryRetries):
+      try:
+         request = urllib2.Request(requestUrl)
+         request.add_header("Content-Type",'application/json')
+         request.add_header("Accept",'application/json')
+         request.add_header("Authorization",authHeader)
+         request.get_method = lambda: method
+   
+         response = urllib2.urlopen(request)
+         ciDataResult = response.read()
+   
+      except IOError, e:
+         print 'Failed to open "%s".' % requestUrl
+         if hasattr(e, 'code'):
+            print 'We failed with error code - %s.' % e.code
+         elif hasattr(e, 'reason'):
+            print "The error object has the following 'reason' attribute :"
+            print e.reason
+            print "This usually means the server doesn't exist,",
+            print "is down, or we don't have an internet connection."
+         #return False
+         retryCount = retryCount + 1
+   
+   if(retryCount == httpQueryRetries):
+      print "Failed to read data after 3 retries"
       return False
-
-   return(ciDataResult)
+   else:
+      return(ciDataResult)
  
 def getCiData(classStructureId, statusFilter):
 
@@ -612,47 +578,49 @@ def getCiData(classStructureId, statusFilter):
          
       
          #print "Result is: " + str(ciDataResult)
-         if(validateJson(ciDataResult)):
-            ciEntries = json.loads(ciDataResult)
-            if(ciEntries["QueryMXOSCIResponse"]["MXOSCISet"].has_key("CI")):
-               print "Number of CI entries for this fetch is: " + str(len(ciEntries["QueryMXOSCIResponse"]["MXOSCISet"]["CI"]))
-               print("Number of items in ciUniqueIdSet is " + str(len(ciUniqueIdSet)) + ", and memsize of ciUniqueIdSet is " + str(sys.getsizeof(ciUniqueIdSet)) + " bytes.")
-               numReturned = int(ciEntries["QueryMXOSCIResponse"]["rsCount"])
-               totalRecords = int(ciEntries["QueryMXOSCIResponse"]["rsTotal"])
-               currentStart = int(ciEntries["QueryMXOSCIResponse"]["rsStart"])
-               if(saveCisToFile == "1" and readCisFromFile == "0"):
-                  text_file = open(mediatorHome + "/log/" + classStructureId + "-raw-ci.json", "a")
-                  text_file.write(json.dumps(ciEntries))
-                  text_file.write("\n")
-                  text_file.close()
-               for ci in ciEntries["QueryMXOSCIResponse"]["MXOSCISet"]["CI"]:
-                  #print "adding " + ci["name"] + " to readCiEntries..."
-                  evaluateCi(ci)
-                  #readCiEntries.append(ci)
-                  #print ci["Attributes"]["CINAME"]["content"] + " -=- " + ci["Attributes"]["CLASSSTRUCTUREID"]["content"]
-                  #print "RELATIONSHIPS:" 
-                  #print ci["RelatedMbos"]
-   
-               numCi = numCi + numReturned
-               time.sleep(ciFetchPause)
-               print "numCi is " + str(numCi) + ", totalRecords is " + str(totalRecords)
-               if(numCi >= totalRecords):
-                  #print "no more"
-                  isMore = 0
-               else:
-                  #print "is more"
-                  rsStart = currentStart + ciFetchLimit
-                  isMore = 1
-            else:
-               print "Query returned no records. We recieved:"
-               print ciDataResult
-               print "Status filter is " + statusFilter + " and CLASSSTRUCTUREID=" + classStructureId
-               return
-               #print "Query used: " + icdServerDict["server"] + '/maxrest/rest/os/mxosci/?' + statusFilter + '&' + classStructureIdFilter + '&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
+         if(ciDataResult == False):
+            print "Skipping this CI entry - error reading CIs from ICD"
          else:
-            print "invalid JSON returned. We got:"
-            print ciDataResult
-            exit()
+            if(validateJson(ciDataResult)):
+               ciEntries = json.loads(ciDataResult)
+               if(ciEntries["QueryMXOSCIResponse"]["MXOSCISet"].has_key("CI")):
+                  print "Number of CI entries for this fetch is: " + str(len(ciEntries["QueryMXOSCIResponse"]["MXOSCISet"]["CI"]))
+                  print("Number of items in ciUniqueIdSet is " + str(len(ciUniqueIdSet)) + ", and memsize of ciUniqueIdSet is " + str(sys.getsizeof(ciUniqueIdSet)) + " bytes.")
+                  numReturned = int(ciEntries["QueryMXOSCIResponse"]["rsCount"])
+                  totalRecords = int(ciEntries["QueryMXOSCIResponse"]["rsTotal"])
+                  currentStart = int(ciEntries["QueryMXOSCIResponse"]["rsStart"])
+                  if(saveCisToFile == "1" and readCisFromFile == "0"):
+                     text_file = open(mediatorHome + "/log/" + classStructureId + "-raw-ci.json", "a")
+                     text_file.write(json.dumps(ciEntries))
+                     text_file.write("\n")
+                     text_file.close()
+                  for ci in ciEntries["QueryMXOSCIResponse"]["MXOSCISet"]["CI"]:
+                     #print "adding " + ci["name"] + " to readCiEntries..."
+                     evaluateCi(ci)
+                     #readCiEntries.append(ci)
+                     #print ci["Attributes"]["CINAME"]["content"] + " -=- " + ci["Attributes"]["CLASSSTRUCTUREID"]["content"]
+                     #print "RELATIONSHIPS:" 
+                     #print ci["RelatedMbos"]
+      
+                  numCi = numCi + numReturned
+                  time.sleep(ciFetchPause)
+                  print "numCi is " + str(numCi) + ", totalRecords is " + str(totalRecords)
+                  if(numCi >= totalRecords):
+                     #print "no more"
+                     isMore = 0
+                  else:
+                     #print "is more"
+                     rsStart = currentStart + ciFetchLimit
+                     isMore = 1
+               else:
+                  print "Query returned no records. We recieved:"
+                  print ciDataResult
+                  print "Status filter is " + statusFilter + " and CLASSSTRUCTUREID=" + classStructureId
+                  return
+                  #print "Query used: " + icdServerDict["server"] + '/maxrest/rest/os/mxosci/?' + statusFilter + '&' + classStructureIdFilter + '&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
+            else:
+               print "invalid JSON returned. We got:"
+               print ciDataResult
       
          print str(numCi) + " items in the cmdb ci table out of a total of " + str(totalRecords)
 
