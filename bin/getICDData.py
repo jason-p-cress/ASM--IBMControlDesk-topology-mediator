@@ -502,14 +502,13 @@ def fetchRestData(classStructureId, statusFilter, offset, page, rsStart, maxItem
       requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?classstructureid=~eq~' + classStructureId + '&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
    else:
       requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?status=~eq~' + statusFilter + '&classstructureid=~eq~' + classStructureId + '&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
-   #requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
-   #requestUrl = icdServerDict["server"] + '/maxrest/rest/os/mxosci/?status=~eq~operating&classstructureid=~eq~RBA_APPSERVER&classstructureid=~eq~CCI00011&_lid=' + icdServerDict["user"] + '&_lpwd=' + icdServerDict["password"] + '&_format=json&_tc=true&_maxItems=' + str(maxItems) + '&_rsStart=' + str(rsStart)
 
    print "My query URL is: " + requestUrl
 
    retryCount = 0
 
    while(retryCount < httpQueryRetries):
+      print "fetching"
       try:
          request = urllib2.Request(requestUrl)
          request.add_header("Content-Type",'application/json')
@@ -519,6 +518,7 @@ def fetchRestData(classStructureId, statusFilter, offset, page, rsStart, maxItem
    
          response = urllib2.urlopen(request)
          ciDataResult = response.read()
+         break
    
       except IOError, e:
          print 'Failed to open "%s".' % requestUrl
@@ -733,6 +733,8 @@ def evaluateRelationships():
 #         edgesFile.flush()
 
    print str(len(ciUniqueIdSet)) + " CI objects found"
+   for ci in ciUniqueIdSet:
+      print ci
    print str(numRelations) + " relationships found"
    gc.collect()
    #print "there are " + str(len(ciUniqueIdSet)) + " items in ciUniqueIdSet, while there are " + str(len(ciUniqueIdList)) + " items in ciCysIdList..."
