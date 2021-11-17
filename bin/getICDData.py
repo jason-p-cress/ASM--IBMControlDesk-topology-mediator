@@ -733,8 +733,6 @@ def evaluateRelationships():
 #         edgesFile.flush()
 
    print str(len(ciUniqueIdSet)) + " CI objects found"
-   for ci in ciUniqueIdSet:
-      print ci
    print str(numRelations) + " relationships found"
    gc.collect()
    #print "there are " + str(len(ciUniqueIdSet)) + " items in ciUniqueIdSet, while there are " + str(len(ciUniqueIdList)) + " items in ciCysIdList..."
