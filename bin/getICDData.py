@@ -490,6 +490,18 @@ def createAsmConnection(connectionDict, jobId):
          print "is down, or we don't have an internet connection."
       return False
 
+def fetchFileData(classStructureId, linenum):
+   if(os.path.exists(mediatorHome + "/log/" + classStructureId + "-raw-ci.json")):
+      with open (mediatorHome + "/log/" + classStructureId + "-raw-ci.json") as rawFp:
+         for index, line in enumerate(rawFp):
+            if(index == linenum):
+               return line
+               break
+      return(False)
+   else:
+      print "no file data found for CLASSSTRUCTUREID: " + classStructureId
+      return(False)
+
 def fetchRestData(classStructureId, statusFilter, offset, page, rsStart, maxItems):
 
 
